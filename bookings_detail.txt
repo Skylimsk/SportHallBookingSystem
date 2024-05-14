@@ -1,0 +1,7 @@
+Table Tennis,25/06/2023,14:00,16:00,Lim Shi Kai,A21EC0196
+Basketball,28/06/2023,12:00,14:00,Phang Seng Soon,A21EC0220
+Badminton,19/06/2023,8:00,10:00,Lim Shi Kai,A21EC0196
+Squash,18/06/2023,15:00,17:00,Ng Keng Keat,A21EC0211
+Squash,15/06/2023,15:00,17:00,Ng Keng Keat,A21EC0211
+
+Table Tennis,06/06/2023,15:00,17:00,Ng Keng Keat,A21EC0211
