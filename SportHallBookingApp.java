@@ -6,10 +6,12 @@ public class SportHallBookingApp {
     private static final String USER_CREDENTIALS_FILE = "credentials.txt";
     private static final String BOOKINGS_FILE = "bookings_detail.txt";
     private static Scanner scanner = new Scanner(System.in);
-    private static SportHallBookingSystem bookingSystem;
+    private static BookingManager bookingManager;
+    private static String systemName = "Sport Hall Booking System";
 
     public static void main(String[] args) {
-        bookingSystem = new SportHallBookingSystem("Sport Hall Booking System");
+        bookingManager = new BookingManager();
+        loadExistingBookings();
 
         boolean exit = false;
         while (!exit) {
@@ -32,8 +34,41 @@ public class SportHallBookingApp {
         }
     }
 
+    /**
+     * Load existing bookings from file into the BookingManager
+     * Silently load bookings without printing success messages
+     */
+    private static void loadExistingBookings() {
+        try (Scanner fileScanner = new Scanner(new File(BOOKINGS_FILE))) {
+            while (fileScanner.hasNextLine()) {
+                String line = fileScanner.nextLine().trim();
+                if (!line.isEmpty()) {
+                    String[] bookingData = line.split(",");
+                    if (bookingData.length == 6) {
+                        try {
+                            // Add the booking silently without printing success message
+                            bookingManager.addBooking(
+                                bookingData[0],   // bookingType
+                                bookingData[1],   // bookingDate
+                                bookingData[2],   // startTime
+                                bookingData[3],   // endTime
+                                bookingData[4],   // bookedBy
+                                bookingData[5]    // bookedById
+                            );
+                        } catch (InvalidInputException e) {
+                            System.out.println("Warning: Invalid booking found in file: " + line);
+                            System.out.println("Reason: " + e.getMessage());
+                        }
+                    }
+                }
+            }
+        } catch (FileNotFoundException e) {
+            System.out.println("Bookings file not found. A new one will be created when needed.");
+        }
+    }
+
     private static void printMainMenu() {
-        System.out.println("\n--- " + bookingSystem.getSystemName() + " ---");
+        System.out.println("\n--- " + systemName + " ---");
         System.out.println("1. Register");
         System.out.println("2. Login");
         System.out.println("3. Exit");
@@ -42,7 +77,6 @@ public class SportHallBookingApp {
     private static int getUserChoice() {
         System.out.print("Enter your choice: ");
         return scanner.nextInt();
-        
     }
 
     private static void registerUser() {
@@ -139,7 +173,7 @@ public class SportHallBookingApp {
     }
 
     private static void printUserMenu(RegisteredUser user) {
-        System.out.println("\n--- " + bookingSystem.getSystemName() + " ---");
+        System.out.println("\n--- " + systemName + " ---");
         System.out.println("Welcome, " + user.getName() + "!");
         System.out.println("1. Book Sport Hall");
         System.out.println("2. View Bookings");
@@ -166,22 +200,29 @@ public class SportHallBookingApp {
         System.out.print("Enter end time (e.g., HH:MM): ");
         String endTime = scanner.next();
 
+        try {
+            bookingManager.addBooking(bookingType, bookingDate, startTime, endTime, user.getName(), user.getId());
 
-        BookingImpl newBooking = new BookingImpl(bookingType, bookingDate, startTime, endTime, user.getName(), user.getId());
-        bookingSystem.addBooking(newBooking);
-
-        if (saveBooking(newBooking)) {
-            System.out.println("Booking successful!");
-        } else {
-            System.out.println("Booking failed. Please try again.");
+            if (saveBooking(bookingType, bookingDate, startTime, endTime, user.getName(), user.getId())) {
+                System.out.println("\n====================");
+                System.out.println("Booking successful!");
+                System.out.println("Your " + bookingType + " court has been booked successfully for "
+                                 + bookingDate + " from " + startTime + " to " + endTime + ".");
+                System.out.println("====================\n");
+            } else {
+                System.out.println("Booking was validated but could not be saved to file. Please try again.");
+            }
+        } catch (InvalidInputException e) {
+            System.out.println("Booking failed: " + e.getMessage());
         }
     }
 
-    private static boolean saveBooking(BookingImpl booking) {
+    private static boolean saveBooking(String bookingType, String bookingDate, String startTime,
+                                     String endTime, String bookedBy, String bookedById) {
         try (FileWriter fileWriter = new FileWriter(BOOKINGS_FILE, true)) {
-            String bookingData = booking.getBookingType() + "," + booking.getBookingDate() + "," +
-                    booking.getStartTime() + "," + booking.getEndTime() + "," +
-                    booking.getBookedBy() + "," + booking.getBookedById() + "\n";
+            String bookingData = bookingType + "," + bookingDate + "," +
+                    startTime + "," + endTime + "," +
+                    bookedBy + "," + bookedById + "\n";
             fileWriter.write(bookingData);
             return true;
         } catch (IOException e) {
@@ -192,106 +233,121 @@ public class SportHallBookingApp {
 
     private static void viewBookings(RegisteredUser user) {
         System.out.println("\n--- View Bookings ---");
-        ArrayList<BookingImpl> userBookings = getUserBookings(user);
-     
 
-        if (userBookings.isEmpty()) {
-            System.out.println("You have no bookings.");
-        } else {
-            System.out.println("Your bookings:");
-            for (BookingImpl booking : userBookings) {
-                System.out.println("Booking Type: " + booking.getBookingType());
-                System.out.println("Booking Date: " + booking.getBookingDate());
-                System.out.println("Start Time: " + booking.getStartTime());
-                System.out.println("End Time: " + booking.getEndTime());
-                System.out.println("Booked By: " + booking.getBookedBy());
-                System.out.println("ID: " + booking.getBookedById());
-                System.out.println("--------------------");
-            }
-        }
-    }
+        try {
+            ArrayList<Booking> userBookings = bookingManager.getBookingsByUser(user.getId());
 
-    private static ArrayList<BookingImpl> getUserBookings(RegisteredUser user) {
-        ArrayList<BookingImpl> userBookings = new ArrayList<>();
-
-        try (Scanner fileScanner = new Scanner(new File(BOOKINGS_FILE))) {
-            while (fileScanner.hasNextLine()) {
-                String line = fileScanner.nextLine();
-                String[] bookingData = line.split(",");
-                if (bookingData.length == 6 && bookingData[4].equals(user.getName()) && bookingData[5].equals(user.getId())) {
-                    BookingImpl booking = new BookingImpl(bookingData[0], bookingData[1], bookingData[2], bookingData[3], bookingData[4], bookingData[5]);
-                    userBookings.add(booking);
+            if (userBookings.isEmpty()) {
+                System.out.println("You have no bookings.");
+            } else {
+                System.out.println("Your bookings:");
+                int index = 1;
+                for (Booking booking : userBookings) {
+                    System.out.println("Booking #" + (index++));
+                    System.out.println("Booking Type: " + booking.getBookingType());
+                    System.out.println("Booking Date: " + booking.getBookingDate());
+                    System.out.println("Start Time: " + booking.getStartTime());
+                    System.out.println("End Time: " + booking.getEndTime());
+                    System.out.println("Booked By: " + booking.getBookedBy());
+                    System.out.println("ID: " + booking.getBookedById());
+                    System.out.println("--------------------");
                 }
             }
-        } catch (FileNotFoundException e) {
-            System.out.println("Bookings file not found.");
+        } catch (InvalidInputException e) {
+            System.out.println("Error retrieving bookings: " + e.getMessage());
         }
-
-        return userBookings;
     }
 
     private static void updateBooking(RegisteredUser user) {
         System.out.println("\n--- Update Booking ---");
-        ArrayList<BookingImpl> userBookings = getUserBookings(user);
 
-        if (userBookings.isEmpty()) {
-            System.out.println("You have no bookings to update.");
-            return;
-        }
+        try {
+            ArrayList<Booking> userBookings = bookingManager.getBookingsByUser(user.getId());
 
-        System.out.println("Your bookings:");
-        for (int i = 0; i < userBookings.size(); i++) {
-            BookingImpl booking = userBookings.get(i);
-            System.out.println((i + 1) + ". Booking Type: " + booking.getBookingType() +
-                    " | Booking Date: " + booking.getBookingDate() +
-                    " | Start Time: " + booking.getStartTime() +
-                    " | End Time: " + booking.getEndTime());
-        }
+            if (userBookings.isEmpty()) {
+                System.out.println("You have no bookings to update.");
+                return;
+            }
 
-        System.out.print("Enter the number of the booking you want to update: ");
-        int choice = scanner.nextInt();
+            System.out.println("Your bookings:");
+            for (int i = 0; i < userBookings.size(); i++) {
+                Booking booking = userBookings.get(i);
+                System.out.println((i + 1) + ". Booking Type: " + booking.getBookingType() +
+                        " | Booking Date: " + booking.getBookingDate() +
+                        " | Start Time: " + booking.getStartTime() +
+                        " | End Time: " + booking.getEndTime());
+            }
 
-        if (choice < 1 || choice > userBookings.size()) {
-            System.out.println("Invalid choice! Please try again.");
-            return;
-        }
+            System.out.print("Enter the number of the booking you want to update: ");
+            int choice = scanner.nextInt();
 
-        BookingImpl selectedBooking = userBookings.get(choice - 1);
-        System.out.println("\nSelected booking:");
-        System.out.println("Booking Type: " + selectedBooking.getBookingType());
-        System.out.println("Booking Date: " + selectedBooking.getBookingDate());
-        System.out.println("Start Time: " + selectedBooking.getStartTime());
-        System.out.println("End Time: " + selectedBooking.getEndTime());
+            if (choice < 1 || choice > userBookings.size()) {
+                System.out.println("Invalid choice! Please try again.");
+                return;
+            }
 
-        String empty = scanner.nextLine();
-        System.out.println("\nEnter new details:");
-        System.out.println("===================");
-        System.out.println("Basketball" + "\nBadminton" + "\nSquash" + "\nTable Tennis");
-        System.out.println("===================");
-        System.out.print("Enter booking type: ");
-        String newBookingType = scanner.nextLine();
+            Booking selectedBooking = userBookings.get(choice - 1);
+            System.out.println("\nSelected booking:");
+            System.out.println("Booking Type: " + selectedBooking.getBookingType());
+            System.out.println("Booking Date: " + selectedBooking.getBookingDate());
+            System.out.println("Start Time: " + selectedBooking.getStartTime());
+            System.out.println("End Time: " + selectedBooking.getEndTime());
 
-        System.out.print("Enter booking date (e.g., DD/MM/YYYY): ");
-        String newBookingDate = scanner.next();
+            scanner.nextLine(); // Consume the newline
+            System.out.println("\nEnter new details:");
+            System.out.println("===================");
+            System.out.println("Basketball" + "\nBadminton" + "\nSquash" + "\nTable Tennis");
+            System.out.println("===================");
+            System.out.print("Enter booking type: ");
+            String newBookingType = scanner.nextLine();
 
-        System.out.print("Enter start time (e.g., HH:MM): ");
-        String newStartTime = scanner.next();
+            System.out.print("Enter booking date (e.g., DD/MM/YYYY): ");
+            String newBookingDate = scanner.next();
 
-        System.out.print("Enter end time (e.g., HH:MM): ");
-        String newEndTime = scanner.next();
+            System.out.print("Enter start time (e.g., HH:MM): ");
+            String newStartTime = scanner.next();
 
-        selectedBooking = new BookingImpl(newBookingType, newBookingDate, newStartTime, newEndTime, user.getName(), user.getId());
-        bookingSystem.removeBooking(userBookings.get(choice - 1));
-        bookingSystem.addBooking(selectedBooking);
+            System.out.print("Enter end time (e.g., HH:MM): ");
+            String newEndTime = scanner.next();
 
-        if (updateBookingFile(userBookings.get(choice - 1), selectedBooking)) {
-            System.out.println("Booking updated successfully!");
-        } else {
-            System.out.println("Failed to update the booking. Please try again.");
+            // First remove the old booking
+            bookingManager.deleteBooking(selectedBooking);
+
+            // Then add the new one
+            try {
+                bookingManager.addBooking(newBookingType, newBookingDate, newStartTime, newEndTime,
+                                        user.getName(), user.getId());
+
+                if (updateBookingFile(selectedBooking, newBookingType, newBookingDate, newStartTime,
+                                    newEndTime, user.getName(), user.getId())) {
+                    System.out.println("Booking updated successfully!");
+                } else {
+                    System.out.println("Failed to update the booking file. Please try again.");
+                }
+            } catch (InvalidInputException e) {
+                System.out.println("Update failed: " + e.getMessage());
+                // Try to add the old booking back
+                try {
+                    bookingManager.addBooking(
+                        selectedBooking.getBookingType(),
+                        selectedBooking.getBookingDate(),
+                        selectedBooking.getStartTime(),
+                        selectedBooking.getEndTime(),
+                        selectedBooking.getBookedBy(),
+                        selectedBooking.getBookedById()
+                    );
+                } catch (InvalidInputException ex) {
+                    System.out.println("Error restoring previous booking. Please check your bookings.");
+                }
+            }
+        } catch (InvalidInputException e) {
+            System.out.println("Error retrieving bookings: " + e.getMessage());
         }
     }
 
-    private static boolean updateBookingFile(BookingImpl oldBooking, BookingImpl newBooking) {
+    private static boolean updateBookingFile(Booking oldBooking, String newBookingType,
+                                          String newBookingDate, String newStartTime,
+                                          String newEndTime, String bookedBy, String bookedById) {
         try {
             File bookingsFile = new File(BOOKINGS_FILE);
             File tempFile = new File("temp.txt");
@@ -309,12 +365,12 @@ public class SportHallBookingApp {
                         bookingData[3].equals(oldBooking.getEndTime()) &&
                         bookingData[4].equals(oldBooking.getBookedBy()) &&
                         bookingData[5].equals(oldBooking.getBookedById())) {
-                    String updatedBooking = newBooking.getBookingType() + "," +
-                            newBooking.getBookingDate() + "," +
-                            newBooking.getStartTime() + "," +
-                            newBooking.getEndTime() + "," +
-                            newBooking.getBookedBy() + "," +
-                            newBooking.getBookedById();
+                    String updatedBooking = newBookingType + "," +
+                            newBookingDate + "," +
+                            newStartTime + "," +
+                            newEndTime + "," +
+                            bookedBy + "," +
+                            bookedById;
                     writer.write(updatedBooking + "\n");
                 } else {
                     writer.write(line + "\n");
@@ -338,41 +394,51 @@ public class SportHallBookingApp {
 
     private static void deleteBooking(RegisteredUser user) {
         System.out.println("\n--- Delete Booking ---");
-        ArrayList<BookingImpl> userBookings = getUserBookings(user);
 
-        if (userBookings.isEmpty()) {
-            System.out.println("You have no bookings to delete.");
-            return;
-        }
+        try {
+            ArrayList<Booking> userBookings = bookingManager.getBookingsByUser(user.getId());
 
-        System.out.println("Your bookings:");
-        for (int i = 0; i < userBookings.size(); i++) {
-            BookingImpl booking = userBookings.get(i);
-            System.out.println((i + 1) + ". Booking Type: " + booking.getBookingType() +
-                    " | Booking Date: " + booking.getBookingDate() +
-                    " | Start Time: " + booking.getStartTime() +
-                    " | End Time: " + booking.getEndTime());
-        }
+            if (userBookings.isEmpty()) {
+                System.out.println("You have no bookings to delete.");
+                return;
+            }
 
-        System.out.print("Enter the number of the booking you want to delete: ");
-        int choice = scanner.nextInt();
+            System.out.println("Your bookings:");
+            for (int i = 0; i < userBookings.size(); i++) {
+                Booking booking = userBookings.get(i);
+                System.out.println((i + 1) + ". Booking Type: " + booking.getBookingType() +
+                        " | Booking Date: " + booking.getBookingDate() +
+                        " | Start Time: " + booking.getStartTime() +
+                        " | End Time: " + booking.getEndTime());
+            }
 
-        if (choice < 1 || choice > userBookings.size()) {
-            System.out.println("Invalid choice! Please try again.");
-            return;
-        }
+            System.out.print("Enter the number of the booking you want to delete: ");
+            int choice = scanner.nextInt();
 
-        BookingImpl selectedBooking = userBookings.get(choice - 1);
-        bookingSystem.removeBooking(selectedBooking);
+            if (choice < 1 || choice > userBookings.size()) {
+                System.out.println("Invalid choice! Please try again.");
+                return;
+            }
 
-        if (deleteBookingFromFile(selectedBooking)) {
-            System.out.println("Booking deleted successfully!");
-        } else {
-            System.out.println("Failed to delete the booking. Please try again.");
+            Booking selectedBooking = userBookings.get(choice - 1);
+
+            try {
+                bookingManager.deleteBooking(selectedBooking);
+
+                if (deleteBookingFromFile(selectedBooking)) {
+                    System.out.println("Booking deleted successfully!");
+                } else {
+                    System.out.println("Failed to delete the booking from file. Please try again.");
+                }
+            } catch (InvalidInputException e) {
+                System.out.println("Delete failed: " + e.getMessage());
+            }
+        } catch (InvalidInputException e) {
+            System.out.println("Error retrieving bookings: " + e.getMessage());
         }
     }
 
-    private static boolean deleteBookingFromFile(BookingImpl booking) {
+    private static boolean deleteBookingFromFile(Booking booking) {
         try {
             File bookingsFile = new File(BOOKINGS_FILE);
             File tempFile = new File("temp.txt");
@@ -390,7 +456,7 @@ public class SportHallBookingApp {
                         bookingData[3].equals(booking.getEndTime()) &&
                         bookingData[4].equals(booking.getBookedBy()) &&
                         bookingData[5].equals(booking.getBookedById())) {
-                    continue;
+                    continue; // Skip this line
                 }
                 writer.write(line + "\n");
             }
