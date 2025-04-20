@@ -106,6 +106,7 @@ public class BookingManager {
             throw new InvalidInputException("User ID must not be empty");
         }
 
+        // PROCESS: Retrieve bookings for the user
         ArrayList<Booking> userBookings = new ArrayList<>();
         for (Booking booking : bookings) {
             if (booking.getBookedById().equals(userId)) {
@@ -136,7 +137,10 @@ public class BookingManager {
             throw new InvalidInputException("Booking does not exist in the system");
         }
 
+
         int beforeSize = bookings.size();
+
+        // PROCESS: Remove booking
         bookings.remove(bookingToDelete);
 
         // POST-CONDITION 1: Check booking was removed
